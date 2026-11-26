@@ -1,0 +1,65 @@
+{
+  "case_id": "arXiv:2011.03269v1-citation-trial",
+  "status": "success",
+  "result": {
+    "citations": [
+      {
+        "id": 1,
+        "marker": "[7]",
+        "context": "photocatalytic activity under real conditions remains to be quantified",
+        "format_ok": true,
+        "anchor": "p3:1"
+      },
+      {
+        "id": 2,
+        "marker": "[12]",
+        "context": "generalizability to other morphologies was not examined",
+        "format_ok": true,
+        "anchor": "p3:1"
+      }
+    ],
+    "reference_list": [
+      {
+        "index": 7,
+        "status": "in_input_only_marker",
+        "note": "摘要仅给出编号标记，未提供完整文献条目"
+      },
+      {
+        "index": 12,
+        "status": "in_input_only_marker"
+      }
+    ],
+    "issues": [
+      {
+        "type": "reference_entry_missing",
+        "detail": "编号[7][12]在摘要中有标记但无文献条目，需补充完整参考文献表",
+        "anchor": "p3:1"
+      }
+    ]
+  },
+  "evidence_map": [
+    {
+      "claim": "引用编号[7]对应光催化活性有待量化",
+      "evidence": "remains to be quantified (Ref. [7])",
+      "anchor": "p3:1"
+    },
+    {
+      "claim": "引用编号[12]对应普适性未检验",
+      "evidence": "generalizability to other morphologies was not examined (Ref. [12])",
+      "anchor": "p3:1"
+    }
+  ],
+  "verification": {
+    "fact_preservation": "通过：事实/数字/限定词/否定原样保留",
+    "anchor_validity": "通过：所有锚点指向输入中真实存在的段落",
+    "no_new_facts": "通过：未新增材料外信息"
+  },
+  "uncertainties": [
+    {
+      "item": "参考文献表缺失",
+      "reason": "输入为摘要片段，仅有引用标记无完整条目，无法核验格式与编号连续性",
+      "location": "p3:1"
+    }
+  ],
+  "change_log": []
+}
