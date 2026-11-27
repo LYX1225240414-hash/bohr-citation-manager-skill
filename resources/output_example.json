@@ -1,18 +1,54 @@
 {
   "case_id": "示例，非真实案例",
-  "status": "success",
-  "result": "[示例主结果，仅展示结构]",
-  "evidence_map": [
+  "status": "partial",
+  "manuscript": "[示例：完整可编辑稿件，保留原段落编号与更新后的引用标记，非正式案例答案]",
+  "citation_actions": [
     {
+      "action_id": "A1",
+      "type": "insert",
+      "before": "[示例论断句，无引用]",
+      "after": "[示例论断句][3]",
+      "reason": "示例：该句为他人结论，需要来源支撑",
+      "anchor": "p1:2",
+      "evidence": "[示例原文短引]"
+    }
+  ],
+  "reference_list": [
+    {
+      "ref_id": "3",
+      "authors": "[示例作者]",
+      "year": "[示例年份]",
+      "title": "[示例题名]",
+      "venue": "[示例刊名]",
+      "doi": "[示例 DOI 或原文未述]",
+      "type": "J",
+      "normalized_key": "[示例归一化键]",
+      "source": "ref:[示例条目]",
+      "verified": "unchecked"
+    }
+  ],
+  "citation_map": [
+    {
+      "citation_id": "C1",
       "claim": "[示例论断]",
+      "ref_id": "3",
+      "position": "p1:2",
+      "match_basis": "[示例：文献结论直接支撑该论断]",
       "evidence": "[示例原文短引]",
-      "anchor": "p1:1"
+      "confidence": "medium"
     }
   ],
   "verification": {
-    "fact_preservation": "示例：通过",
-    "anchor_validity": "示例：通过"
+    "placement_precision": { "result": "pass", "evidence": "示例：抽查 5/5 条落在论断句" },
+    "numbering_continuity": { "result": "pass", "evidence": "示例：编号 1-12 连续，孤儿引用 0" },
+    "dedupe_correctness": { "result": "na", "evidence": "示例：无重复条目" },
+    "format_completeness": { "result": "pass", "evidence": "示例：字段完整 11/12 条" },
+    "source_validity": { "result": "na", "evidence": "示例：无 DOI 可核验" },
+    "claim_ref_match": { "result": "pass", "evidence": "示例：匹配 5/5 条" },
+    "coverage": { "result": "pass", "evidence": "示例：6 类动作已覆盖" },
+    "no_new_facts": { "result": "pass", "evidence": "示例：未新增材料外事实" }
   },
-  "uncertainties": [],
-  "change_log": []
+  "uncertainties": ["[示例：某条目 DOI 无法解析，verified 记为 unchecked]"],
+  "sources": ["[示例：稿件路径与页码范围]"],
+  "change_log": ["[示例：编号 [5]→[4]，同步更新交叉引用]"]
 }
