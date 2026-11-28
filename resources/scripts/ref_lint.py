@@ -24,7 +24,7 @@ ref_lint.py — 参考文献编号一致性与条目质量核验器（citation-m
   dangling_citation   正文引用了列表里不存在的编号
   uncited_entry       列表条目正文未引用
   numbering_gap       编号不连续（缺号）
-  numbering_duplicate 编号重复
+  numbering_duplicate 编号重复（指参考文献列表内同一编号出现两条以上；正文多次引用同一编号不算重号，仅列在 repeated_citations 供参考）
   order_mismatch      首次引用顺序与列表编号顺序不一致（顺序编码制应一致）
   duplicate_entry     疑似同一文献出现多次
   metadata_missing    条目缺作者/年份/题名
@@ -42,6 +42,24 @@ import re
 import sys
 from difflib import SequenceMatcher
 from pathlib import Path
+
+
+def _as_outfile(p, default_name):
+    """--out 兼容层：传目录则写入目录下 default_name，传文件名则直接写该文件。"""
+    path = Path(p)
+    if path.is_dir() or not path.suffix:
+        path = path / default_name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _as_outdir(p):
+    """--out 兼容层：传的是文件名时取其父目录，避免把文件路径当目录用而崩溃。"""
+    path = Path(p)
+    if path.suffix.lower() in (".json", ".md", ".txt", ".yaml", ".yml", ".csv", ".tex", ".bib"):
+        path = path.parent if str(path.parent) not in ("", ".") else Path(".")
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 CITE_NUM = re.compile(r"\[(\d{1,3}(?:\s*[,\-–—]\s*\d{1,3})*)\]")
 CITE_TEX = re.compile(r"\\cite[a-z]*\{([^}]+)\}")
@@ -112,26 +130,37 @@ def parse_tex_cites(body):
 
 
 def parse_entries(refs_text):
-    """返回 {编号或key: {raw, authors, year, title, has_doi}}"""
+    """返回 ({编号或key: {raw, authors, year, title, has_doi}}, mode, dup_list)
+
+    dup_list 只统计**参考文献列表内部**同一编号/key 出现多次（如两条都标 [2]）。
+    正文多次引用同一编号属于正常学术写法，不计为重号。
+    """
     entries = {}
+    counter = {}
     # bibitem
     for m in BIBITEM.finditer(refs_text):
         key, rest = m.group(1), re.sub(r"\s+", " ", m.group(2)).strip()
+        counter[key] = counter.get(key, 0) + 1
         entries[key] = mk_entry(rest)
     if entries:
-        return entries, "tex"
+        dup_list = [{"num": k, "times": c} for k, c in counter.items() if c > 1]
+        return entries, "tex", dup_list
     cur_num, buf = None, []
+    counter = {}
     for line in refs_text.splitlines():
         m = ENTRY_NUM.match(line)
         if m:
             if cur_num is not None:
                 entries[str(cur_num)] = mk_entry(" ".join(buf))
+                counter[cur_num] = counter.get(cur_num, 0) + 1
             cur_num, buf = int(m.group(1)), [m.group(2).strip()]
         elif line.strip() and cur_num is not None:
             buf.append(line.strip())
     if cur_num is not None:
         entries[str(cur_num)] = mk_entry(" ".join(buf))
-    return entries, "numeric"
+        counter[cur_num] = counter.get(cur_num, 0) + 1
+    dup_list = [{"num": k, "times": c} for k, c in sorted(counter.items()) if c > 1]
+    return entries, "numeric", dup_list
 
 
 def mk_entry(raw):
@@ -169,7 +198,7 @@ def cmd_check(args):
         print(json.dumps({"ok": False, "error": "未找到参考文献列表（含 References/参考文献 标题或 --refs 文件）"}, ensure_ascii=False))
         return 1
 
-    entries, mode = parse_entries(refs_text)
+    entries, mode, list_dups = parse_entries(refs_text)
     if not entries:
         print(json.dumps({"ok": False, "error": "参考文献列表未解析出条目"}, ensure_ascii=False))
         return 1
@@ -180,7 +209,9 @@ def cmd_check(args):
         dangling = [{"key": k, "line": ln, "snippet": sn, "reason": "列表无此 bibitem"}
                     for k, ln, sn in cites if k not in entries]
         uncited = [{"key": k, "title": v["title"][:100]} for k, v in entries.items() if k not in set(cited_keys)]
-        numbering_gap, numbering_dup, order_mismatch = [], [], []
+        numbering_gap, order_mismatch = [], []
+        numbering_dup = list(list_dups)
+        repeated_citations = []
         first_order = []
         for k, _, _ in cites:
             if k not in first_order:
@@ -199,10 +230,13 @@ def cmd_check(args):
             for n in range(min(nums), max(nums) + 1):
                 if n not in nums:
                     numbering_gap.append({"missing": n})
+        # 重号只看参考文献列表内部（两条都标 [2]）；正文多次引用同一编号属正常写法，
+        # 仅作为提示性信息 repeated_citations 输出，不计入问题数。
+        numbering_dup = list(list_dups)
         counter = {}
         for n in cited:
             counter[n] = counter.get(n, 0) + 1
-        numbering_dup = [{"num": n, "times": c} for n, c in counter.items() if c > 1 and n in nums]
+        repeated_citations = [{"num": n, "times": c} for n, c in sorted(counter.items()) if c > 1]
         # 首次引用顺序
         first_order = []
         for n in cited:
@@ -286,6 +320,7 @@ def cmd_check(args):
         "cite_placement_issue_count": len(cite_placement),
         "dangling": dangling[:40], "uncited": uncited[:40],
         "numbering_gaps": numbering_gap[:30], "numbering_duplicates": numbering_dup[:30],
+        "repeated_citations": repeated_citations[:30],
         "order_mismatch": order_mismatch[:10], "duplicate_entries": dup_groups[:20],
         "metadata_missing": meta_missing[:40], "style_inconsistent": style_inconsistent,
         "cite_placement": cite_placement[:20],
@@ -297,7 +332,7 @@ def cmd_check(args):
             "metadata_accuracy": f"元数据齐全 {len(entries) - len(meta_missing)} / {len(entries)}",
         },
     }
-    outdir = Path(args.out)
+    outdir = _as_outdir(args.out)
     outdir.mkdir(parents=True, exist_ok=True)
     (outdir / "ref_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
     md = ["# 参考文献核验报告", "",
@@ -331,7 +366,7 @@ def cmd_merge(args):
         _, refs_text = split_single(read(args.single))
     else:
         refs_text = read(args.refs)
-    entries, mode = parse_entries(refs_text)
+    entries, mode, list_dups = parse_entries(refs_text)
     if not entries:
         print(json.dumps({"ok": False, "error": "未解析出条目"}, ensure_ascii=False))
         return 1
@@ -347,8 +382,8 @@ def cmd_merge(args):
                                "basis": "题名相似度 ≥0.80"})
     out = {"ok": True, "mode": mode, "candidates": sorted(groups, key=lambda x: -x["similarity"]),
            "note": "仅给候选，不自动合并。合并前须人工确认为同一文献（预印本/正式版/中英文题名需看 DOI 与卷期）。"}
-    Path(args.out).mkdir(parents=True, exist_ok=True)
-    (Path(args.out) / "merge_suggestions.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
+    _d = _as_outdir(args.out)
+    (_d / "merge_suggestions.json").write_text(json.dumps(out, ensure_ascii=False, indent=2), encoding="utf-8")
     print(json.dumps({"ok": True, "candidates": len(groups), "top": out["candidates"][:5]}, ensure_ascii=False))
     return 0
 
