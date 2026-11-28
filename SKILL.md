@@ -93,6 +93,17 @@ cat /app/work/ref_report.md
 python3 "$R" merge --single /app/work/manuscript.md --out /app/work
 ```
 
+**写出 result.json 后必须跑一次定位回查**——`check` 只保证编号自洽，发现不了"论断短引不在稿件里、证据短引不在文献库里、ref_id 指向不存在条目"这类致命错误：
+
+```bash
+python3 "$R" placement --manuscript /app/output/manuscript_edited.md \
+                       --result /app/output/result.json \
+                       --refs /app/output/reference_list.md --out /app/work
+cat /app/work/placement_report.md
+```
+
+`placement_report.json` 给出 `claim_found_count` / `evidence_found_count` / `ref_resolved_count` / `anchor_ok_count` / `basis_ok_count`（分母均为 `citation_map_count`）。`claim_not_found_in_manuscript`、`evidence_not_found_in_references`、`ref_id_unresolved` 必须为 0；发现即回到第 2/4 步把论断、证据和编号改成真实可回查的原文短引，修完重跑。把五项计数原样写入 `verification.placement_precision` 与 `verification.claim_ref_match` 的 evidence，不得只写"通过"。
+
 之后做脚本测不出的判断：引用是否真的挂在**需要来源支撑的那句论断**上（而非整段末尾）、正文论断与所引文献主题是否真的匹配、条目元数据是否与原文一致。
 
 逐项核对 `resources/checklist.md`，把结果写入 `verification`（**优先用脚本计数**，不要只写“通过”）：
@@ -117,7 +128,7 @@ python3 "$R" merge --single /app/work/manuscript.md --out /app/work
 
 ## 资源
 
-- `resources/scripts/ref_lint.py`：**执行内核**。`check` 检出悬空引用、未引条目、编号跳号/重号、首次引用顺序不符、重复条目、元数据缺失、风格不一致与引用堆叠；`merge` 给出重复条目归并候选（不自动合并）。重号只统计参考文献列表内部重复，正文多次引用同一编号仅记为 `repeated_citations` 提示。`--out` 可传目录（写入约定文件名）或直接传文件名，两种写法都不会报错。纯标准库，无第三方依赖。
+- `resources/scripts/ref_lint.py`：**执行内核**。`check` 检出悬空引用、未引条目、编号跳号/重号、首次引用顺序不符、重复条目、元数据缺失、风格不一致与引用堆叠；`merge` 给出重复条目归并候选（不自动合并）；`placement` 回查 `citation_map` 的论断短引、证据短引、ref_id、锚点、匹配依据与置信度是否真实可回查。重号只统计参考文献列表内部重复，正文多次引用同一编号仅记为 `repeated_citations` 提示。`--out` 可传目录（写入约定文件名）或直接传文件名，两种写法都不会报错。纯标准库，无第三方依赖。
 - `environment/resources.yaml`：资源清单、依赖、运行时与产物说明。
 - `resources/checklist.md`：自检与计数清单。
 - `resources/field_dict.md`：字段字典、锚点格式、去重判据与编号规则。
@@ -132,6 +143,11 @@ R=/skills/weekly-skill/resources/scripts/ref_lint.py
 python3 "$R" check --single /app/work/manuscript.md --out /app/work
 python3 "$R" merge --single /app/work/manuscript.md --out /app/work
 cat /app/work/ref_report.md
+# 写出 result.json 与稿件后：
+python3 "$R" placement --manuscript /app/output/manuscript_edited.md \
+                       --result /app/output/result.json --refs /app/output/reference_list.md \
+                       --out /app/work
+cat /app/work/placement_report.md
 ```
 
 示意输出（仅结构）：
