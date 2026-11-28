@@ -1,5 +1,5 @@
 name: citation-manager
-version: 1.2.0
+version: 1.3.0
 entrypoint: ../SKILL.md
 bundle_root: ..
 description: >
@@ -11,14 +11,15 @@ resources:
     kind: executable
     runtime: python3
     entry: "python3 resources/scripts/ref_lint.py"
-    subcommands: [check, merge]
+    subcommands: [check, merge, placement]
     requires: []          # 纯标准库
     supports:
       citation_styles: ["numbered [1]", "superscript", "latex \\cite{key}"]
       list_styles: ["[1] Author (2020) ...", "1. Author (2020) ...", "\\bibitem{key} ..."]
     inputs: ["单文件（正文 + References/参考文献 标题）", "或 --body + --refs 两个文件"]
     outputs: ["/app/work/ref_report.json", "/app/work/ref_report.md",
-              "/app/work/merge_suggestions.json"]
+              "/app/work/merge_suggestions.json",
+              "/app/work/placement_report.json", "/app/work/placement_report.md"]
     outputs_note: >
       ref_report.json 的 verification_hint 给出 citation_resolvability /
       numbering_consistency / reference_coverage / dedup_clean / metadata_accuracy 五项计数口径。
@@ -53,3 +54,4 @@ runtime:
 
 changelog:
   - "1.2.0: 重号改为只统计参考文献列表内部重复，正文多次引用同一编号仅记 repeated_citations 提示；--out 兼容目录或文件名。"
+  - "1.3.0: 新增 placement 子命令，机械回查 citation_map 的论断/证据短引、ref_id、锚点与匹配依据；文档与脚本子命令保持一致。"
