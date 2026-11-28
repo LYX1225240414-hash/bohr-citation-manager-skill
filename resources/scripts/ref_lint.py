@@ -9,9 +9,11 @@ ref_lint.py — 参考文献编号一致性与条目质量核验器（citation-m
 这些全部可以机械核对。
 
 子命令：
-  check   核验正文与参考文献列表 → ref_report.json + ref_report.md
-  merge   对疑似重复条目给出归并建议（不自动删改）→ merge_suggestions.json
-  reformat 按指定风格检查条目字段覆盖（numeric/author-year）→ 仅报告缺项
+  check      核验正文与参考文献列表 → ref_report.json + ref_report.md
+  merge      对疑似重复条目给出归并建议（不自动删改）→ merge_suggestions.json
+  placement  核验 result.json 的 citation_map：论断短引是否真在改稿里、
+             证据短引是否真在文献库里、ref_id 是否可解析、锚点与匹配依据是否填写
+             → placement_report.json + placement_report.md
 
 输入约定（两种皆可）：
   A) 单文件：正文与参考文献在同一个 markdown/tex 文件里，列表位于 "References" 或 "参考文献" 之后
@@ -34,6 +36,9 @@ ref_lint.py — 参考文献编号一致性与条目质量核验器（citation-m
 用法：
   python3 ref_lint.py check --body draft.md --refs refs.md --out /app/work
   python3 ref_lint.py check --single manuscript.md --out /app/work
+  python3 ref_lint.py placement --manuscript /app/output/manuscript_edited.md \
+                                --result /app/output/result.json \
+                                --refs /app/output/reference_list.md --out /app/work
 """
 
 import argparse
@@ -361,6 +366,106 @@ def cmd_check(args):
     return 0
 
 
+def cmd_placement(args):
+    """核验 citation_map 的论断/证据/编号/锚点是否真的可回查。
+
+    这是"挂得对、对得上"的机械底线：check 只保证编号自洽，
+    无法发现 citation_map 里 claim 不在稿件里、evidence 不在文献库里、
+    ref_id 指向不存在的条目这类致命但没有语法错误的结论。
+    """
+    result_text = read(args.result)
+    try:
+        data = json.loads(result_text)
+    except Exception as e:
+        print(json.dumps({"ok": False, "error": "result.json 无法解析", "detail": str(e)[:120]},
+                         ensure_ascii=False))
+        return 1
+    cmap = data.get("citation_map") if isinstance(data, dict) else None
+    if not isinstance(cmap, list) or not cmap:
+        print(json.dumps({"ok": False, "error": "result.json 缺少非空 citation_map 数组"},
+                         ensure_ascii=False))
+        return 1
+    manuscript = read(args.manuscript)
+    refs_text = read(args.refs) if args.refs else ""
+    ref_list = data.get("reference_list") if isinstance(data.get("reference_list"), list) else []
+    ref_ids = {str(x.get("ref_id")) for x in ref_list if isinstance(x, dict) and x.get("ref_id") is not None}
+    for x in ref_list:
+        if isinstance(x, dict):
+            refs_text += " " + " ".join(str(v) for v in x.values() if isinstance(v, (str, int)))
+    man_norm = norm(manuscript)
+    refs_norm = norm(refs_text)
+    if not man_norm:
+        print(json.dumps({"ok": False, "error": "稿件为空或路径不存在"}, ensure_ascii=False))
+        return 1
+    if not refs_norm:
+        print(json.dumps({"ok": False, "error": "文献库为空或路径不存在"}, ensure_ascii=False))
+        return 1
+
+    issues = []
+    seen_ids = set()
+    for i, item in enumerate(cmap, 1):
+        if not isinstance(item, dict):
+            issues.append({"index": i, "problem": "entry_not_object"})
+            continue
+        cid = str(item.get("citation_id") or i)
+        if cid in seen_ids:
+            issues.append({"index": i, "citation_id": cid, "problem": "duplicate_citation_id"})
+        seen_ids.add(cid)
+        claim = norm(item.get("claim"))
+        if len(claim) < 4 or claim not in man_norm:
+            issues.append({"index": i, "citation_id": cid, "problem": "claim_not_found_in_manuscript",
+                           "claim": str(item.get("claim") or "")[:100]})
+        evidence = norm(item.get("evidence"))
+        if len(evidence) < 4 or evidence not in refs_norm:
+            issues.append({"index": i, "citation_id": cid, "problem": "evidence_not_found_in_references",
+                           "evidence": str(item.get("evidence") or "")[:100]})
+        rid = str(item.get("ref_id") or "").strip()
+        if not rid or (rid not in ref_ids and norm(rid) not in refs_norm and rid not in refs_text):
+            issues.append({"index": i, "citation_id": cid, "problem": "ref_id_unresolved", "ref_id": rid})
+        anchor = str(item.get("position") or "").strip()
+        if not anchor or anchor.upper() in ("N/A", "NA", "示例") or "示例" in anchor:
+            issues.append({"index": i, "citation_id": cid, "problem": "anchor_missing_or_placeholder"})
+        basis = norm(item.get("match_basis"))
+        if len(basis) < 6:
+            issues.append({"index": i, "citation_id": cid, "problem": "match_basis_missing"})
+        conf = str(item.get("confidence") or "").strip().lower()
+        if conf not in ("high", "medium", "low"):
+            issues.append({"index": i, "citation_id": cid, "problem": "confidence_invalid", "confidence": conf})
+
+    problems = {}
+    for x in issues:
+        problems[x["problem"]] = problems.get(x["problem"], 0) + 1
+    report = {
+        "ok": True, "citation_map_count": len(cmap),
+        "claim_found_count": len(cmap) - problems.get("claim_not_found_in_manuscript", 0),
+        "evidence_found_count": len(cmap) - problems.get("evidence_not_found_in_references", 0),
+        "ref_resolved_count": len(cmap) - problems.get("ref_id_unresolved", 0),
+        "anchor_ok_count": len(cmap) - problems.get("anchor_missing_or_placeholder", 0),
+        "basis_ok_count": len(cmap) - problems.get("match_basis_missing", 0),
+        "issue_count": len(issues), "issues_by_type": problems, "issues": issues[:60],
+        "verification_hint": {
+            "placement_precision": f"论断短引命中 {len(cmap) - problems.get('claim_not_found_in_manuscript', 0)}/{len(cmap)}；锚点有效 {len(cmap) - problems.get('anchor_missing_or_placeholder', 0)}/{len(cmap)}；应为全数",
+            "claim_ref_match": f"证据短引命中 {len(cmap) - problems.get('evidence_not_found_in_references', 0)}/{len(cmap)}；ref_id 可解析 {len(cmap) - problems.get('ref_id_unresolved', 0)}/{len(cmap)}；匹配依据已填 {len(cmap) - problems.get('match_basis_missing', 0)}/{len(cmap)}",
+        },
+    }
+    outdir = _as_outdir(args.out)
+    (outdir / "placement_report.json").write_text(
+        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    md = ["# 引用定位回查报告", "",
+          f"- citation_map 条目：{len(cmap)}｜问题：{len(issues)}",
+          f"- {report['verification_hint']['placement_precision']}",
+          f"- {report['verification_hint']['claim_ref_match']}", ""]
+    if issues:
+        md += ["## 问题清单", ""]
+        md += [f"- {json.dumps(x, ensure_ascii=False)[:240]}" for x in issues[:40]]
+    else:
+        md += ["机械检查全部通过；仍需人工判断论断与文献主题是否真的匹配。"]
+    (outdir / "placement_report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
+    print(json.dumps({"ok": True, "citation_map_count": len(cmap), "issue_count": len(issues),
+                      "by_type": problems}, ensure_ascii=False))
+    return 0
+
+
 def cmd_merge(args):
     if args.single:
         _, refs_text = split_single(read(args.single))
@@ -396,8 +501,13 @@ def main():
     c.add_argument("--out", required=True)
     m = sub.add_parser("merge")
     m.add_argument("--single"); m.add_argument("--refs"); m.add_argument("--out", required=True)
+    pl = sub.add_parser("placement")
+    pl.add_argument("--manuscript", required=True)
+    pl.add_argument("--result", required=True)
+    pl.add_argument("--refs")
+    pl.add_argument("--out", required=True)
     a = ap.parse_args()
-    return {"check": cmd_check, "merge": cmd_merge}[a.cmd](a) or 0
+    return {"check": cmd_check, "merge": cmd_merge, "placement": cmd_placement}[a.cmd](a) or 0
 
 
 if __name__ == "__main__":
