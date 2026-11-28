@@ -1,5 +1,5 @@
 name: citation-manager
-version: 1.1.0
+version: 1.2.0
 entrypoint: ../SKILL.md
 bundle_root: ..
 description: >
@@ -50,3 +50,6 @@ runtime:
     脚本只做编号与文本一致性核对，不做 DOI 联网解析。
     duplicate_entry 与 merge 候选基于题名相似度，合并前必须人工确认
     （预印本/正式版、中英文题名、同名作者不同文献都是易错点）。
+
+changelog:
+  - "1.2.0: 重号改为只统计参考文献列表内部重复，正文多次引用同一编号仅记 repeated_citations 提示；--out 兼容目录或文件名。"
