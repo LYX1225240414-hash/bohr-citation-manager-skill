@@ -80,7 +80,8 @@ cat /app/work/ref_report.md
 | `dangling_citation` | 正文引用了列表里没有的编号 | **必须修**：补条目或改编号（这是最严重的错误） |
 | `uncited_entry` | 列表有条目正文未引 | 评估：属于关键工作则补引，否则从列表删除 |
 | `numbering_gap` | 编号跳号 | 按顺序编码制重排，并同步正文全部编号 |
-| `numbering_duplicate` | 同一编号出现多次定义 | 核对是否重复条目，合并后重排 |
+| `numbering_duplicate` | 参考文献**列表内**同一编号被定义两次（如两条都标 `[2]`） | 核对是否重复条目，合并后重排 |
+| `repeated_citations`（提示项，不计入问题数） | 正文多次引用同一编号 | 属正常学术写法，不需修改；仅用于核对引用密度 |
 | `order_mismatch` | 首次引用顺序与列表编号不一致 | 顺序编码制下必须一致：按首次出现重排 |
 | `duplicate_entry` | 条目题名高度相似（≥0.86） | 用 `merge` 子命令取候选，确认同一文献后合并并记依据 |
 | `metadata_missing` | 缺作者或年份 | 补齐；原文确实没有则标 `原文未述` 并进 uncertainties |
@@ -116,7 +117,7 @@ python3 "$R" merge --single /app/work/manuscript.md --out /app/work
 
 ## 资源
 
-- `resources/scripts/ref_lint.py`：**执行内核**。`check` 检出悬空引用、未引条目、编号跳号/重号、首次引用顺序不符、重复条目、元数据缺失、风格不一致与引用堆叠；`merge` 给出重复条目归并候选（不自动合并）。纯标准库，无第三方依赖。
+- `resources/scripts/ref_lint.py`：**执行内核**。`check` 检出悬空引用、未引条目、编号跳号/重号、首次引用顺序不符、重复条目、元数据缺失、风格不一致与引用堆叠；`merge` 给出重复条目归并候选（不自动合并）。重号只统计参考文献列表内部重复，正文多次引用同一编号仅记为 `repeated_citations` 提示。`--out` 可传目录（写入约定文件名）或直接传文件名，两种写法都不会报错。纯标准库，无第三方依赖。
 - `environment/resources.yaml`：资源清单、依赖、运行时与产物说明。
 - `resources/checklist.md`：自检与计数清单。
 - `resources/field_dict.md`：字段字典、锚点格式、去重判据与编号规则。
