@@ -63,7 +63,38 @@ description: 参考文献与引用管理工作流，按论断句定位插入引�
 - **来源核验**：可用的 DOI 或数据库信息逐条核对，标记 `verified` 为 true/false/unchecked；无法核验不得写成“已核实”。
 
 ### 第 5 步：三重自检与回修（关键）
-逐项核对 `resources/checklist.md`，把结果写入 `verification`（必须带计数，不要只写“通过”）：
+
+**先跑机械核验，再做人工判断**——编号是否连续、正文与列表是否一一对应、是否有重复条目，这些完全可以机械核对：
+
+```bash
+R=/skills/weekly-skill/resources/scripts/ref_lint.py
+# 正文与列表在同一文件（含 References / 参考文献 标题）
+python3 "$R" check --single /app/work/manuscript.md --out /app/work
+# 或分开两个文件
+python3 "$R" check --body /app/work/draft.md --refs /app/work/references.md --out /app/work
+cat /app/work/ref_report.md
+```
+
+| 报告项 | 含义 | 动作 |
+|---|---|---|
+| `dangling_citation` | 正文引用了列表里没有的编号 | **必须修**：补条目或改编号（这是最严重的错误） |
+| `uncited_entry` | 列表有条目正文未引 | 评估：属于关键工作则补引，否则从列表删除 |
+| `numbering_gap` | 编号跳号 | 按顺序编码制重排，并同步正文全部编号 |
+| `numbering_duplicate` | 同一编号出现多次定义 | 核对是否重复条目，合并后重排 |
+| `order_mismatch` | 首次引用顺序与列表编号不一致 | 顺序编码制下必须一致：按首次出现重排 |
+| `duplicate_entry` | 条目题名高度相似（≥0.86） | 用 `merge` 子命令取候选，确认同一文献后合并并记依据 |
+| `metadata_missing` | 缺作者或年份 | 补齐；原文确实没有则标 `原文未述` 并进 uncertainties |
+| `style_inconsistent` | 部分条目有 DOI/年份、部分没有 | 统一风格：要么全补，要么统一省略并说明 |
+| `cite_placement` | 同一处堆叠 4 个以上引用 | 确认是否每个论断都有对应来源，避免"整段末尾堆引用" |
+
+疑似重复条目取归并候选（**不自动合并**，预印本/正式版/中英题名需看 DOI 与卷期判断）：
+```bash
+python3 "$R" merge --single /app/work/manuscript.md --out /app/work
+```
+
+之后做脚本测不出的判断：引用是否真的挂在**需要来源支撑的那句论断**上（而非整段末尾）、正文论断与所引文献主题是否真的匹配、条目元数据是否与原文一致。
+
+逐项核对 `resources/checklist.md`，把结果写入 `verification`（**优先用脚本计数**，不要只写“通过”）：
 1. **覆盖**：需支撑论断句数 / 已配引用句数、文献库条目数 / 输出条目数、六类动作是否均有记录。
 2. **回查**：抽查每条 `citation_map` 的 `anchor` 能否找到 `evidence` 短引；统计成功数 / 总数，失败即修正或降 confidence 并写入 `uncertainties`。
 3. **一致性**：编号连续、正文—文后一一对应、去重无误并、元数据无新增事实、格式字段齐全。发现问题回到第 3/4 步修正并记入 `change_log`。
@@ -85,12 +116,29 @@ description: 参考文献与引用管理工作流，按论断句定位插入引�
 
 ## 资源
 
+- `resources/scripts/ref_lint.py`：**执行内核**。`check` 检出悬空引用、未引条目、编号跳号/重号、首次引用顺序不符、重复条目、元数据缺失、风格不一致与引用堆叠；`merge` 给出重复条目归并候选（不自动合并）。纯标准库，无第三方依赖。
+- `environment/resources.yaml`：资源清单、依赖、运行时与产物说明。
 - `resources/checklist.md`：自检与计数清单。
 - `resources/field_dict.md`：字段字典、锚点格式、去重判据与编号规则。
 - `resources/citation_rules.md`：GB/T 7714—2015 与 APA 常用字段映射、去重与核验示例。
 - `resources/output_example.json`：输出结构示意（非答案）。
 - `examples/README.md`：最小调用示例。
 
-## 最小示例
+## 最小示例（示意，非真实稿件）
 
-见 `examples/README.md`。示意输出仅展示字段结构，不代表任何真实稿件的引用整理结果。
+```bash
+R=/skills/weekly-skill/resources/scripts/ref_lint.py
+python3 "$R" check --single /app/work/manuscript.md --out /app/work
+python3 "$R" merge --single /app/work/manuscript.md --out /app/work
+cat /app/work/ref_report.md
+```
+
+示意输出（仅结构）：
+
+```json
+{"mode": "numeric", "entry_count": 42, "distinct_cited": 40, "dangling_count": 0,
+ "uncited_count": 2, "numbering_gap_count": 0, "numbering_duplicate_count": 0,
+ "order_mismatch_count": 0, "duplicate_group_count": 0, "metadata_missing_count": 1}
+```
+
+真正的结果必须来自本次实际运行，示意输出不得冒充正式案例答案。
